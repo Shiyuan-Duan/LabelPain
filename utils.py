@@ -28,9 +28,11 @@ def get_data(subject):
     # data['HR_interval'] = data['itp_HR'] * 1000 / 60
     data['itp_HR(bpm)'] -= base_hr
     data['itp_RR(bpm)'] -= base_rr
+    start = anno['Sensor Lab time (s)']
+    end = anno['Sensor lab stop 9s)']
     
     data = data.ffill().bfill()
-    return data.values, data
+    return {'data_np':data.values, 'data_df':data, 'lab_draw_start':start, 'lab_draw_end':end, 'base_hr':base_hr, 'base_rr':base_rr}
 
 
 
@@ -56,7 +58,65 @@ def label_pain(df):
     df['pain_score'] = df['itp_F0(Hz)'].rolling(30).apply(decision_tree)
     return df
 
+def acc_decision_tree(slice):
+    if slice.max() > 0.2:
+        return 2
+    elif slice.max()>0.1 and slice.max()<0.2:
+        return 1
+    else:
+        return 0
+    
+def label_acc(df):
+    df['acc_score'] = df['L_Active(g)'].rolling(30).apply(acc_decision_tree)
+    return df.fillna(0)
 
+def hr_decision_tree(hr, hr_baseline):
+    def in_range(x, low, high):
+        return x>low and x < high
+
+    if hr.max() > 0.2*hr_baseline:
+        return 2
+    elif in_range(hr.max(), 0.1*hr_baseline, 0.2*hr_baseline):
+        return 1
+    else:
+        return 0
+    
+def label_vitals_hr(df, hr_baseline):
+
+    df['hr_score'] = df['itp_HR(bpm)'].rolling(window=30).apply(lambda x: hr_decision_tree(x, hr_baseline), raw=False)
+
+    return df.fillna(0)
+
+
+def rr_decision_tree(rr, rr_baseline):
+    def in_range(x, low, high):
+        return x>low and x < high
+
+    if rr.max() > 0.2*rr_baseline:
+        return 2
+    elif in_range(rr.max(), 0.1*rr_baseline, 0.2*rr_baseline):
+        return 1
+    else:
+        return 0
+    
+def label_vitals_rr(df, rr_baseline):
+
+    df['rr_score'] = df['itp_RR(bpm)'].rolling(window=30).apply(lambda x: hr_decision_tree(x, rr_baseline), raw=False)
+
+    return df.fillna(0)
+
+def label_data(sub):
+    data = get_data(sub)
+    df, base_hr, base_rr = data['data_df'], data['base_hr'], data['base_rr']
+
+    # label all vitals
+    df = label_pain(df)
+    df = label_acc(df)
+    df = label_vitals_hr(df, base_hr)
+    df = label_vitals_rr(df, base_rr)
+    df['vital_score'] = df[['hr_score','rr_score']].max(axis=1)
+    df['score_sum'] = df[['vital_score', 'pain_score', 'acc_score']].sum(axis=1)
+    return df
 
 
 def plot_distribution(subject):
