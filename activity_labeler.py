@@ -34,7 +34,7 @@ def main():
         data = data['data_df']['L_Active(g)'].values.flatten()
 
         # Determine the slice range
-        end_index = start_index + 300
+        end_index = start_index + 1200
 
         # Plot the signal
         plot_signal(data, start_index, end_index)
